@@ -177,7 +177,7 @@ internal sealed class CleanupForm : Form
         cleanupActions.Controls.Add(MakeActionButton(networkButton, "Network Cleanup", StepGroup.Network));
         cleanupActions.Controls.Add(MakeActionButton(systemButton, "System Cleanup", StepGroup.System));
         cleanupActions.Controls.Add(MakeLinkButton(dotNetButton, "Get .NET"));
-        autoRunSystemCheckBox.Text = "Run System Cleanup at startup";
+        autoRunSystemCheckBox.Text = "Run System Cleanup at startup without UAC prompt";
         autoRunSystemCheckBox.Width = 250;
         autoRunSystemCheckBox.Height = 36;
         autoRunSystemCheckBox.Margin = new Padding(12, 2, 10, 2);
@@ -372,41 +372,60 @@ internal sealed class CleanupForm : Form
 
     private bool IsStartupEnabled()
     {
-        try
-        {
-            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
-            {
-                return key != null && key.GetValue("WinCleanNetworkTunning") != null;
-            }
-        }
-        catch
-        {
-            return false;
-        }
+        return RunHidden("schtasks.exe", "/Query /TN \"WinCleanNetworkTunning System Cleanup\"").ExitCode == 0;
     }
 
     private void SetStartupEnabled(bool enabled)
+    {
+        if (enabled)
+        {
+            string taskCommand = "\"" + Application.ExecutablePath + "\" --autorun-system-cleanup";
+            string args = "/Create /F /TN \"WinCleanNetworkTunning System Cleanup\" /SC ONLOGON /RL HIGHEST /TR \"" + taskCommand + "\"";
+            CommandResult result = RunHidden("schtasks.exe", args);
+            if (result.ExitCode == 0)
+            {
+                RemoveOldRegistryStartup();
+                status.Text = "Startup enabled: System Cleanup will auto-run elevated at sign-in.";
+            }
+            else
+            {
+                status.Text = "Could not create startup task: " + Shorten(result.Text, 180);
+                autoRunSystemCheckBox.Checked = false;
+            }
+            return;
+        }
+
+        CommandResult deleteResult = RunHidden("schtasks.exe", "/Delete /F /TN \"WinCleanNetworkTunning System Cleanup\"");
+        RemoveOldRegistryStartup();
+        status.Text = deleteResult.ExitCode == 0 ? "Startup disabled." : "Startup was not enabled.";
+    }
+
+    private void RemoveOldRegistryStartup()
     {
         try
         {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true))
             {
-                if (key == null) return;
-                if (enabled)
-                {
-                    key.SetValue("WinCleanNetworkTunning", "\"" + Application.ExecutablePath + "\" --autorun-system-cleanup");
-                    status.Text = "Startup enabled: System Cleanup will auto-run at sign-in.";
-                }
-                else
-                {
-                    key.DeleteValue("WinCleanNetworkTunning", false);
-                    status.Text = "Startup disabled.";
-                }
+                if (key != null) key.DeleteValue("WinCleanNetworkTunning", false);
             }
         }
-        catch (Exception ex)
+        catch { }
+    }
+
+    private CommandResult RunHidden(string fileName, string arguments)
+    {
+        ProcessStartInfo startInfo = new ProcessStartInfo(fileName, arguments);
+        startInfo.UseShellExecute = false;
+        startInfo.CreateNoWindow = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+
+        using (Process process = Process.Start(startInfo))
         {
-            status.Text = "Could not update startup option: " + ex.Message;
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return new CommandResult(process.ExitCode, (output + error).Trim());
         }
     }
 

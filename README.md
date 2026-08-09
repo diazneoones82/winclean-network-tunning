@@ -15,7 +15,7 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 - Auto-elevates with UAC when administrator access is needed.
 - Creates a fresh timestamped log file for every run.
 - Shows per-command progress and stores command result details for completed or failed steps.
-- Optional startup checkbox to auto-run System Cleanup at user sign-in.
+- Optional startup checkbox to auto-run System Cleanup at user sign-in through an elevated Windows Scheduled Task, avoiding repeated UAC prompts after the one-time setup.
 
 ## Important
 
