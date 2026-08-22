@@ -242,23 +242,71 @@ internal sealed class CleanupForm : Form
 
     private void BuildTray()
     {
+        bool lightTheme = IsWindowsLightTheme();
+        Color menuBack = lightTheme ? Color.FromArgb(255, 250, 245) : Panel;
+        Color menuText = lightTheme ? Color.FromArgb(58, 33, 18) : TextMain;
+        Color menuSelected = lightTheme ? Color.FromArgb(255, 228, 204) : Color.FromArgb(62, 29, 10);
+
         ContextMenuStrip menu = new ContextMenuStrip();
-        menu.BackColor = Panel;
-        menu.ForeColor = TextMain;
-        menu.Items.Add("Open", null, delegate { RestoreFromTray(); });
+        menu.BackColor = menuBack;
+        menu.ForeColor = menuText;
+        menu.Font = new Font("Segoe UI", 9.5F);
+        menu.Padding = new Padding(7);
+        menu.ShowImageMargin = false;
+        menu.Renderer = new TrayMenuRenderer(menuBack, menuText, menuSelected, Accent);
+        menu.Opening += delegate
+        {
+            menu.BeginInvoke(new MethodInvoker(delegate
+            {
+                using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, menu.Width, menu.Height), 14))
+                {
+                    menu.Region = new Region(path);
+                }
+            }));
+        };
+
+        AddTrayItem(menu, "Open", delegate { RestoreFromTray(); });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Run Full Cleanup", null, delegate { StartFromTray(StepGroup.Full); });
-        menu.Items.Add("Run Network Cleanup", null, delegate { StartFromTray(StepGroup.Network); });
-        menu.Items.Add("Run System Cleanup", null, delegate { StartFromTray(StepGroup.System); });
-        menu.Items.Add("Run Tunning", null, delegate { StartFromTray(StepGroup.Tuning); });
+        AddTrayItem(menu, "Run Full Cleanup", delegate { StartFromTray(StepGroup.Full); });
+        AddTrayItem(menu, "Run Network Cleanup", delegate { StartFromTray(StepGroup.Network); });
+        AddTrayItem(menu, "Run System Cleanup", delegate { StartFromTray(StepGroup.System); });
+        AddTrayItem(menu, "Run Tunning", delegate { StartFromTray(StepGroup.Tuning); });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Exit", null, delegate { ExitFromTray(); });
+        AddTrayItem(menu, "Exit", delegate { ExitFromTray(); });
 
         trayIcon.Icon = Icon == null ? SystemIcons.Application : Icon;
         trayIcon.Text = AppName;
         trayIcon.ContextMenuStrip = menu;
         trayIcon.Visible = true;
         trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+    }
+
+    private void AddTrayItem(ContextMenuStrip menu, string text, EventHandler click)
+    {
+        ToolStripMenuItem item = new ToolStripMenuItem(text);
+        item.ForeColor = menu.ForeColor;
+        item.BackColor = menu.BackColor;
+        item.AutoSize = false;
+        item.Width = 210;
+        item.Height = 34;
+        item.Click += click;
+        menu.Items.Add(item);
+    }
+
+    private bool IsWindowsLightTheme()
+    {
+        try
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+            {
+                object value = key == null ? null : key.GetValue("AppsUseLightTheme");
+                return value is int && (int)value != 0;
+            }
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void BuildSteps()
@@ -811,6 +859,59 @@ internal sealed class BorderPanel : Panel
         using (Pen pen = new Pen(borderColor, 1.2F))
         {
             e.Graphics.DrawPath(pen, path);
+        }
+    }
+}
+
+internal sealed class TrayMenuRenderer : ToolStripProfessionalRenderer
+{
+    private readonly Color background;
+    private readonly Color text;
+    private readonly Color selected;
+    private readonly Color accent;
+
+    public TrayMenuRenderer(Color background, Color text, Color selected, Color accent)
+    {
+        this.background = background;
+        this.text = text;
+        this.selected = selected;
+        this.accent = accent;
+    }
+
+    protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+    {
+        e.Graphics.Clear(background);
+    }
+
+    protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+    {
+        Rectangle rect = new Rectangle(4, 2, e.Item.Width - 8, e.Item.Height - 4);
+        if (e.Item.Selected || e.Item.Pressed)
+        {
+            using (GraphicsPath path = CleanupForm.RoundedRect(rect, 9))
+            using (SolidBrush brush = new SolidBrush(selected))
+            using (Pen pen = new Pen(accent, 1F))
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.FillPath(brush, path);
+                e.Graphics.DrawPath(pen, path);
+            }
+        }
+    }
+
+    protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+    {
+        e.TextColor = text;
+        e.TextRectangle = new Rectangle(e.TextRectangle.X + 4, e.TextRectangle.Y, e.TextRectangle.Width - 4, e.TextRectangle.Height);
+        base.OnRenderItemText(e);
+    }
+
+    protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+    {
+        int y = e.Item.Height / 2;
+        using (Pen pen = new Pen(Color.FromArgb(150, accent), 1F))
+        {
+            e.Graphics.DrawLine(pen, 10, y, e.Item.Width - 10, y);
         }
     }
 }

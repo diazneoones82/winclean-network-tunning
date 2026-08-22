@@ -19,6 +19,7 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 - Close or minimize to keep the app running in the system tray.
 - Tray menu includes Open, Run Full Cleanup, Run Network Cleanup, Run System Cleanup, Run Tunning, and Exit.
 - Custom orange AMOLED cleanup/network icon is embedded in the app and used for the window, taskbar, and tray.
+- Polished tray menu supports Windows light and dark app themes with rounded orange hover states.
 
 ## Important
 
