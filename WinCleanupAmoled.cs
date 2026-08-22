@@ -254,15 +254,13 @@ internal sealed class CleanupForm : Form
         menu.Padding = new Padding(7);
         menu.ShowImageMargin = false;
         menu.Renderer = new TrayMenuRenderer(menuBack, menuText, menuSelected, Accent);
-        menu.Opening += delegate
+        menu.Opened += delegate
         {
-            menu.BeginInvoke(new MethodInvoker(delegate
+            if (menu.Width <= 0 || menu.Height <= 0) return;
+            using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, menu.Width, menu.Height), 14))
             {
-                using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, menu.Width, menu.Height), 14))
-                {
-                    menu.Region = new Region(path);
-                }
-            }));
+                menu.Region = new Region(path);
+            }
         };
 
         AddTrayItem(menu, "Open", delegate { RestoreFromTray(); });
@@ -623,10 +621,10 @@ internal sealed class CleanupForm : Form
 
         SetStatus("Complete. Some network reset changes may require a restart. Log: " + logPath);
         AppendLog("Complete.");
-        Invoke(new Action(delegate
+        OnUi(delegate
         {
             trayIcon.ShowBalloonTip(3500, AppName, "Run complete. Log: " + Path.GetFileName(logPath), ToolTipIcon.Info);
-        }));
+        });
         isRunning = false;
         SetButtons(true);
     }
@@ -660,7 +658,7 @@ internal sealed class CleanupForm : Form
 
     private void UpdateStep(int index, string text, Color color)
     {
-        Invoke(new Action(delegate
+        OnUi(delegate
         {
             stepList.BeginUpdate();
             stepList.Items[index].SubItems[1].Text = text;
@@ -669,7 +667,7 @@ internal sealed class CleanupForm : Form
             stepList.Items[index].Selected = true;
             stepList.TopItem = stepList.Items[Math.Max(0, index - 4)];
             stepList.EndUpdate();
-        }));
+        });
     }
 
     private void ShowStepInfo(object sender, MouseEventArgs e)
@@ -709,34 +707,57 @@ internal sealed class CleanupForm : Form
 
     private void SetStatus(string text)
     {
-        Invoke(new Action(delegate { status.Text = text; }));
+        OnUi(delegate { status.Text = text; });
     }
 
     private void SetProgress(int value)
     {
-        Invoke(new Action(delegate { progress.Value = value; }));
+        OnUi(delegate { progress.Value = value; });
     }
 
     private void AppendLog(string text)
     {
         if (text.Length == 0) return;
-        Invoke(new Action(delegate
+        OnUi(delegate
         {
             logBox.AppendText(text + Environment.NewLine);
             logBox.SelectionStart = logBox.TextLength;
             logBox.ScrollToCaret();
-        }));
+        });
     }
 
     private void SetButtons(bool enabled)
     {
-        Invoke(new Action(delegate
+        OnUi(delegate
         {
             fullButton.Enabled = enabled;
             networkButton.Enabled = enabled;
             systemButton.Enabled = enabled;
             tuningButton.Enabled = enabled;
-        }));
+        });
+    }
+
+    private void OnUi(MethodInvoker action)
+    {
+        if (IsDisposed) return;
+        if (!IsHandleCreated)
+        {
+            action();
+            return;
+        }
+        if (InvokeRequired)
+        {
+            try
+            {
+                BeginInvoke(action);
+            }
+            catch (InvalidOperationException)
+            {
+                if (!IsDisposed) action();
+            }
+            return;
+        }
+        action();
     }
 
     private string GroupLabel(StepGroup group)
