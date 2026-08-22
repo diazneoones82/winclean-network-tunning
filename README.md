@@ -22,6 +22,7 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 - Polished tray menu supports Windows light and dark app themes with rounded orange hover states.
 - Tray restore and background runs use handle-safe UI updates to avoid WinForms handle timing errors.
 - Native thick Windows app border with polished AMOLED content surfaces.
+- Native window title bar and border are tinted dark grey/black instead of using the blue Windows accent color.
 - Tray menu uses compact rounded command rows with a soft orange accent rail.
 - Custom dark/orange segmented tabs, progress bar, and command list headers avoid stock WinForms white highlight blocks.
 - Uses the native Windows frame to avoid borderless-window white corner artifacts.

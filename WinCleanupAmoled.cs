@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using Microsoft.Win32;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Threading;
 using System.Windows.Forms;
@@ -67,6 +68,10 @@ internal static class Program
 internal sealed class CleanupForm : Form
 {
     private const string AppName = "WinClean & Network Tunning";
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_CAPTION_COLOR = 35;
+    private const int DWMWA_TEXT_COLOR = 36;
+    private const int DWMWA_BORDER_COLOR = 34;
     internal static readonly Color Amoled = Color.Black;
     internal static readonly Color Panel = Color.FromArgb(10, 7, 5);
     internal static readonly Color PanelSoft = Color.FromArgb(22, 12, 7);
@@ -95,6 +100,9 @@ internal sealed class CleanupForm : Form
     private volatile bool isRunning;
     private bool allowExit;
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
     public CleanupForm(bool autoRunSystemOnOpen)
     {
         BuildSteps();
@@ -105,6 +113,32 @@ internal sealed class CleanupForm : Form
         {
             Shown += delegate { StartCleanup(StepGroup.System); };
         }
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        ApplyNativeFrameColors();
+    }
+
+    private void ApplyNativeFrameColors()
+    {
+        if (!IsHandleCreated) return;
+
+        int darkMode = 1;
+        DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+
+        int caption = ColorRef(Color.FromArgb(18, 18, 18));
+        int border = ColorRef(Color.FromArgb(35, 35, 35));
+        int text = ColorRef(Color.FromArgb(238, 238, 238));
+        DwmSetWindowAttribute(Handle, DWMWA_CAPTION_COLOR, ref caption, sizeof(int));
+        DwmSetWindowAttribute(Handle, DWMWA_BORDER_COLOR, ref border, sizeof(int));
+        DwmSetWindowAttribute(Handle, DWMWA_TEXT_COLOR, ref text, sizeof(int));
+    }
+
+    private int ColorRef(Color color)
+    {
+        return color.R | (color.G << 8) | (color.B << 16);
     }
 
     private void BuildUi()
