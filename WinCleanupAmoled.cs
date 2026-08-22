@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using Microsoft.Win32;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Threading;
 using System.Windows.Forms;
@@ -67,6 +68,8 @@ internal static class Program
 internal sealed class CleanupForm : Form
 {
     private const string AppName = "WinClean & Network Tunning";
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCAPTION = 0x2;
     internal static readonly Color Amoled = Color.Black;
     internal static readonly Color Panel = Color.FromArgb(10, 7, 5);
     internal static readonly Color PanelSoft = Color.FromArgb(22, 12, 7);
@@ -93,6 +96,12 @@ internal sealed class CleanupForm : Form
     private volatile bool isRunning;
     private bool allowExit;
 
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
     public CleanupForm(bool autoRunSystemOnOpen)
     {
         BuildSteps();
@@ -112,10 +121,11 @@ internal sealed class CleanupForm : Form
         Height = 720;
         MinimumSize = new Size(760, 560);
         StartPosition = FormStartPosition.CenterScreen;
+        FormBorderStyle = FormBorderStyle.None;
         BackColor = Amoled;
         ForeColor = TextMain;
         Font = new Font("Segoe UI", 10F);
-        Padding = new Padding(10);
+        Padding = new Padding(12);
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Resize += delegate { ApplyRoundedWindow(); };
 
@@ -124,7 +134,7 @@ internal sealed class CleanupForm : Form
         layout.BackColor = Amoled;
         layout.ColumnCount = 1;
         layout.RowCount = 6;
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58F));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 18F));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
@@ -133,15 +143,7 @@ internal sealed class CleanupForm : Form
         Controls.Add(layout);
         ApplyRoundedWindow();
 
-        Label title = new Label();
-        title.Text = AppName;
-        title.Font = new Font("Segoe UI Semibold", 24F);
-        title.ForeColor = Accent;
-        title.BackColor = Amoled;
-        title.Dock = DockStyle.Fill;
-        title.TextAlign = ContentAlignment.MiddleLeft;
-        title.Padding = new Padding(18, 0, 0, 0);
-        layout.Controls.Add(title, 0, 0);
+        layout.Controls.Add(BuildTitleBar(), 0, 0);
 
         status.Text = "Ready. A new log will be created for each run.";
         status.Dock = DockStyle.Fill;
@@ -240,18 +242,82 @@ internal sealed class CleanupForm : Form
         ShowSteps(StepGroup.Full);
     }
 
+    private Control BuildTitleBar()
+    {
+        Panel bar = new Panel();
+        bar.Dock = DockStyle.Fill;
+        bar.BackColor = Amoled;
+        bar.Padding = new Padding(16, 8, 12, 8);
+        bar.MouseDown += DragWindow;
+
+        PictureBox iconBox = new PictureBox();
+        iconBox.Image = Icon == null ? SystemIcons.Application.ToBitmap() : Icon.ToBitmap();
+        iconBox.SizeMode = PictureBoxSizeMode.StretchImage;
+        iconBox.Width = 34;
+        iconBox.Height = 34;
+        iconBox.Left = 16;
+        iconBox.Top = 14;
+        iconBox.MouseDown += DragWindow;
+        bar.Controls.Add(iconBox);
+
+        Label title = new Label();
+        title.Text = AppName;
+        title.Font = new Font("Segoe UI Semibold", 18F);
+        title.ForeColor = Accent;
+        title.BackColor = Amoled;
+        title.AutoSize = false;
+        title.TextAlign = ContentAlignment.MiddleLeft;
+        title.Left = 60;
+        title.Top = 8;
+        title.Height = 46;
+        title.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
+        title.Width = Width - 190;
+        title.MouseDown += DragWindow;
+        bar.Controls.Add(title);
+
+        TitleButton close = new TitleButton("x");
+        close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        close.Left = Width - 64;
+        close.Top = 13;
+        close.Click += delegate { Close(); };
+        bar.Controls.Add(close);
+
+        TitleButton minimize = new TitleButton("-");
+        minimize.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        minimize.Left = Width - 108;
+        minimize.Top = 13;
+        minimize.Click += delegate { WindowState = FormWindowState.Minimized; };
+        bar.Controls.Add(minimize);
+
+        bar.Resize += delegate
+        {
+            title.Width = Math.Max(120, bar.Width - 172);
+            minimize.Left = bar.Width - 98;
+            close.Left = bar.Width - 54;
+        };
+
+        return bar;
+    }
+
+    private void DragWindow(object sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left) return;
+        ReleaseCapture();
+        SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+    }
+
     private void BuildTray()
     {
         bool lightTheme = IsWindowsLightTheme();
-        Color menuBack = lightTheme ? Color.FromArgb(255, 250, 245) : Panel;
+        Color menuBack = lightTheme ? Color.FromArgb(255, 250, 245) : Color.FromArgb(12, 8, 6);
         Color menuText = lightTheme ? Color.FromArgb(58, 33, 18) : TextMain;
-        Color menuSelected = lightTheme ? Color.FromArgb(255, 228, 204) : Color.FromArgb(62, 29, 10);
+        Color menuSelected = lightTheme ? Color.FromArgb(255, 226, 198) : Color.FromArgb(70, 31, 10);
 
         ContextMenuStrip menu = new ContextMenuStrip();
         menu.BackColor = menuBack;
         menu.ForeColor = menuText;
         menu.Font = new Font("Segoe UI", 9.5F);
-        menu.Padding = new Padding(7);
+        menu.Padding = new Padding(8);
         menu.ShowImageMargin = false;
         menu.Renderer = new TrayMenuRenderer(menuBack, menuText, menuSelected, Accent);
         menu.Opened += delegate
@@ -285,8 +351,8 @@ internal sealed class CleanupForm : Form
         item.ForeColor = menu.ForeColor;
         item.BackColor = menu.BackColor;
         item.AutoSize = false;
-        item.Width = 210;
-        item.Height = 34;
+        item.Width = 232;
+        item.Height = 38;
         item.Click += click;
         menu.Items.Add(item);
     }
@@ -802,6 +868,19 @@ internal sealed class CleanupForm : Form
         if (WindowState == FormWindowState.Minimized) HideToTray();
     }
 
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        using (GraphicsPath path = RoundedRect(new Rectangle(1, 1, Width - 3, Height - 3), 18))
+        using (Pen outer = new Pen(Color.FromArgb(135, Accent), 1.6F))
+        using (Pen inner = new Pen(Color.FromArgb(55, AccentSoft), 1F))
+        {
+            e.Graphics.DrawPath(outer, path);
+            e.Graphics.DrawPath(inner, RoundedRect(new Rectangle(5, 5, Width - 11, Height - 11), 14));
+        }
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (!allowExit && e.CloseReason == CloseReason.UserClosing)
@@ -862,6 +941,48 @@ internal sealed class RoundedButton : Button
     }
 }
 
+internal sealed class TitleButton : Button
+{
+    private bool hovering;
+
+    public TitleButton(string text)
+    {
+        Text = text;
+        Width = 36;
+        Height = 34;
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        BackColor = CleanupForm.PanelSoft;
+        ForeColor = Color.FromArgb(255, 210, 166);
+        Font = new Font("Segoe UI Semibold", 13F);
+        Cursor = Cursors.Hand;
+        UseVisualStyleBackColor = false;
+        MouseEnter += delegate { hovering = true; Invalidate(); };
+        MouseLeave += delegate { hovering = false; Invalidate(); };
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
+        Color fill = hovering ? Color.FromArgb(78, 34, 10) : BackColor;
+        using (GraphicsPath path = CleanupForm.RoundedRect(rect, 11))
+        using (SolidBrush brush = new SolidBrush(fill))
+        using (Pen pen = new Pen(hovering ? CleanupForm.Accent : CleanupForm.AccentSoft, 1F))
+        using (StringFormat format = new StringFormat())
+        {
+            e.Graphics.FillPath(brush, path);
+            e.Graphics.DrawPath(pen, path);
+            format.Alignment = StringAlignment.Center;
+            format.LineAlignment = StringAlignment.Center;
+            using (SolidBrush textBrush = new SolidBrush(ForeColor))
+            {
+                e.Graphics.DrawString(Text, Font, textBrush, rect, format);
+            }
+        }
+    }
+}
+
 internal sealed class BorderPanel : Panel
 {
     private readonly Color borderColor = CleanupForm.AccentSoft;
@@ -906,10 +1027,10 @@ internal sealed class TrayMenuRenderer : ToolStripProfessionalRenderer
 
     protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
     {
-        Rectangle rect = new Rectangle(4, 2, e.Item.Width - 8, e.Item.Height - 4);
+        Rectangle rect = new Rectangle(5, 3, e.Item.Width - 10, e.Item.Height - 6);
         if (e.Item.Selected || e.Item.Pressed)
         {
-            using (GraphicsPath path = CleanupForm.RoundedRect(rect, 9))
+            using (GraphicsPath path = CleanupForm.RoundedRect(rect, 11))
             using (SolidBrush brush = new SolidBrush(selected))
             using (Pen pen = new Pen(accent, 1F))
             {
@@ -917,13 +1038,20 @@ internal sealed class TrayMenuRenderer : ToolStripProfessionalRenderer
                 e.Graphics.FillPath(brush, path);
                 e.Graphics.DrawPath(pen, path);
             }
+
+            Rectangle rail = new Rectangle(rect.X + 7, rect.Y + 8, 3, rect.Height - 16);
+            using (GraphicsPath railPath = CleanupForm.RoundedRect(rail, 2))
+            using (SolidBrush railBrush = new SolidBrush(accent))
+            {
+                e.Graphics.FillPath(railBrush, railPath);
+            }
         }
     }
 
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
         e.TextColor = text;
-        e.TextRectangle = new Rectangle(e.TextRectangle.X + 4, e.TextRectangle.Y, e.TextRectangle.Width - 4, e.TextRectangle.Height);
+        e.TextRectangle = new Rectangle(e.TextRectangle.X + 14, e.TextRectangle.Y, e.TextRectangle.Width - 14, e.TextRectangle.Height);
         base.OnRenderItemText(e);
     }
 
