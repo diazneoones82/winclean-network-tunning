@@ -18,6 +18,7 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 - Optional startup checkbox to auto-run System Cleanup at user sign-in through an elevated Windows Scheduled Task, avoiding repeated UAC prompts after the one-time setup.
 - Close or minimize to keep the app running in the system tray.
 - Tray menu includes Open, Run Full Cleanup, Run Network Cleanup, Run System Cleanup, Run Tunning, and Exit.
+- Custom orange AMOLED cleanup/network icon is embedded in the app and used for the window, taskbar, and tray.
 
 ## Important
 

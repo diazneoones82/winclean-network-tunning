@@ -116,6 +116,7 @@ internal sealed class CleanupForm : Form
         ForeColor = TextMain;
         Font = new Font("Segoe UI", 10F);
         Padding = new Padding(10);
+        Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Resize += delegate { ApplyRoundedWindow(); };
 
         TableLayoutPanel layout = new TableLayoutPanel();
@@ -253,7 +254,7 @@ internal sealed class CleanupForm : Form
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, delegate { ExitFromTray(); });
 
-        trayIcon.Icon = SystemIcons.Application;
+        trayIcon.Icon = Icon == null ? SystemIcons.Application : Icon;
         trayIcon.Text = AppName;
         trayIcon.ContextMenuStrip = menu;
         trayIcon.Visible = true;
