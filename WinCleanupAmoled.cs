@@ -127,8 +127,9 @@ internal sealed class CleanupForm : Form
         BackColor = Amoled;
         ForeColor = TextMain;
         Font = new Font("Segoe UI", 10F);
-        Padding = new Padding(14);
+        Padding = new Padding(16);
         DoubleBuffered = true;
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Resize += delegate { ApplyRoundedWindow(); };
 
@@ -479,9 +480,9 @@ internal sealed class CleanupForm : Form
     private RoundedButton MakeLinkButton(RoundedButton button, string text)
     {
         button.Text = text;
-        button.Width = 120;
+        button.Width = 150;
         button.Height = 36;
-        button.Margin = new Padding(4, 2, 10, 2);
+        button.Margin = new Padding(4, 2, 12, 2);
         button.BackColor = PanelSoft;
         button.ForeColor = Color.FromArgb(255, 210, 166);
         button.BorderColor = AccentSoft;
@@ -660,7 +661,8 @@ internal sealed class CleanupForm : Form
 
     private void ApplyRoundedWindow()
     {
-        using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, Width, Height), 18))
+        if (Width <= 0 || Height <= 0) return;
+        using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), 20))
         {
             Region = new Region(path);
         }
@@ -944,14 +946,17 @@ internal sealed class CleanupForm : Form
     {
         base.OnPaint(e);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using (GraphicsPath path = RoundedRect(new Rectangle(1, 1, Width - 3, Height - 3), 18))
-        using (GraphicsPath innerPath = RoundedRect(new Rectangle(5, 5, Width - 11, Height - 11), 14))
-        using (Pen outer = new Pen(Color.FromArgb(135, Accent), 1.6F))
-        using (Pen inner = new Pen(Color.FromArgb(55, AccentSoft), 1F))
+        e.Graphics.Clear(Amoled);
+        using (GraphicsPath path = RoundedRect(new Rectangle(3, 3, Width - 7, Height - 7), 18))
+        using (Pen outer = new Pen(Color.FromArgb(175, AccentSoft), 1.4F))
         {
             e.Graphics.DrawPath(outer, path);
-            e.Graphics.DrawPath(inner, innerPath);
         }
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        e.Graphics.Clear(Amoled);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -1015,6 +1020,7 @@ internal sealed class RoundedButton : Button
 
     public RoundedButton()
     {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
         UseVisualStyleBackColor = false;
@@ -1024,6 +1030,7 @@ internal sealed class RoundedButton : Button
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        e.Graphics.Clear(Parent == null ? CleanupForm.Amoled : Parent.BackColor);
         Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
         Color fill = Enabled ? BackColor : Color.FromArgb(16, 12, 10);
         Color border = Enabled ? BorderColor : Color.FromArgb(75, 45, 25);
@@ -1044,6 +1051,11 @@ internal sealed class RoundedButton : Button
             }
         }
     }
+
+    protected override void OnPaintBackground(PaintEventArgs pevent)
+    {
+        pevent.Graphics.Clear(Parent == null ? CleanupForm.Amoled : Parent.BackColor);
+    }
 }
 
 internal sealed class TitleButton : Button
@@ -1052,6 +1064,7 @@ internal sealed class TitleButton : Button
 
     public TitleButton(string text)
     {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Text = text;
         Width = 36;
         Height = 34;
@@ -1069,6 +1082,7 @@ internal sealed class TitleButton : Button
     protected override void OnPaint(PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        e.Graphics.Clear(Parent == null ? CleanupForm.Amoled : Parent.BackColor);
         Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
         Color fill = hovering ? Color.FromArgb(78, 34, 10) : BackColor;
         using (GraphicsPath path = CleanupForm.RoundedRect(rect, 11))
@@ -1085,6 +1099,11 @@ internal sealed class TitleButton : Button
                 e.Graphics.DrawString(Text, Font, textBrush, rect, format);
             }
         }
+    }
+
+    protected override void OnPaintBackground(PaintEventArgs pevent)
+    {
+        pevent.Graphics.Clear(Parent == null ? CleanupForm.Amoled : Parent.BackColor);
     }
 }
 
