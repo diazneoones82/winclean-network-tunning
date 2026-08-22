@@ -87,14 +87,17 @@ internal sealed class CleanupForm : Form
     private readonly RoundedButton tuningButton = new RoundedButton();
     private readonly RoundedButton dotNetButton = new RoundedButton();
     private readonly CheckBox autoRunSystemCheckBox = new CheckBox();
+    private readonly NotifyIcon trayIcon = new NotifyIcon();
     private readonly ToolTip stepTip = new ToolTip();
     private string logPath = "";
     private volatile bool isRunning;
+    private bool allowExit;
 
     public CleanupForm(bool autoRunSystemOnOpen)
     {
         BuildSteps();
         BuildUi();
+        BuildTray();
         CheckDotNetRuntime();
         if (autoRunSystemOnOpen)
         {
@@ -234,6 +237,27 @@ internal sealed class CleanupForm : Form
         layout.Controls.Add(listPanel, 0, 3);
 
         ShowSteps(StepGroup.Full);
+    }
+
+    private void BuildTray()
+    {
+        ContextMenuStrip menu = new ContextMenuStrip();
+        menu.BackColor = Panel;
+        menu.ForeColor = TextMain;
+        menu.Items.Add("Open", null, delegate { RestoreFromTray(); });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Run Full Cleanup", null, delegate { StartFromTray(StepGroup.Full); });
+        menu.Items.Add("Run Network Cleanup", null, delegate { StartFromTray(StepGroup.Network); });
+        menu.Items.Add("Run System Cleanup", null, delegate { StartFromTray(StepGroup.System); });
+        menu.Items.Add("Run Tunning", null, delegate { StartFromTray(StepGroup.Tuning); });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Exit", null, delegate { ExitFromTray(); });
+
+        trayIcon.Icon = SystemIcons.Application;
+        trayIcon.Text = AppName;
+        trayIcon.ContextMenuStrip = menu;
+        trayIcon.Visible = true;
+        trayIcon.DoubleClick += delegate { RestoreFromTray(); };
     }
 
     private void BuildSteps()
@@ -500,6 +524,11 @@ internal sealed class CleanupForm : Form
 
     private void StartCleanup(StepGroup group)
     {
+        if (isRunning)
+        {
+            trayIcon.ShowBalloonTip(2500, AppName, "A cleanup run is already in progress.", ToolTipIcon.Info);
+            return;
+        }
         ShowSteps(group);
         logPath = NewLogPath();
         logBox.Clear();
@@ -509,6 +538,12 @@ internal sealed class CleanupForm : Form
         Thread worker = new Thread(RunCleanup);
         worker.IsBackground = true;
         worker.Start();
+    }
+
+    private void StartFromTray(StepGroup group)
+    {
+        StartCleanup(group);
+        trayIcon.ShowBalloonTip(2500, AppName, "Started " + GroupLabel(group) + " in the background.", ToolTipIcon.Info);
     }
 
     private void RunCleanup()
@@ -539,6 +574,10 @@ internal sealed class CleanupForm : Form
 
         SetStatus("Complete. Some network reset changes may require a restart. Log: " + logPath);
         AppendLog("Complete.");
+        Invoke(new Action(delegate
+        {
+            trayIcon.ShowBalloonTip(3500, AppName, "Run complete. Log: " + Path.GetFileName(logPath), ToolTipIcon.Info);
+        }));
         isRunning = false;
         SetButtons(true);
     }
@@ -649,6 +688,62 @@ internal sealed class CleanupForm : Form
             systemButton.Enabled = enabled;
             tuningButton.Enabled = enabled;
         }));
+    }
+
+    private string GroupLabel(StepGroup group)
+    {
+        if (group == StepGroup.Network) return "Network Cleanup";
+        if (group == StepGroup.System) return "System Cleanup";
+        if (group == StepGroup.Tuning) return "Tunning";
+        return "Full Cleanup";
+    }
+
+    private void HideToTray()
+    {
+        Hide();
+        ShowInTaskbar = false;
+        trayIcon.ShowBalloonTip(2500, AppName, "Still running in the background. Use the tray icon to open, run, or exit.", ToolTipIcon.Info);
+    }
+
+    private void RestoreFromTray()
+    {
+        ShowInTaskbar = true;
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+    }
+
+    private void ExitFromTray()
+    {
+        if (isRunning && MessageBox.Show("A run is still in progress. Exit anyway?", AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        allowExit = true;
+        trayIcon.Visible = false;
+        Close();
+    }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        ApplyRoundedWindow();
+        if (WindowState == FormWindowState.Minimized) HideToTray();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!allowExit && e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+            HideToTray();
+            return;
+        }
+
+        trayIcon.Visible = false;
+        trayIcon.Dispose();
+        base.OnFormClosing(e);
     }
 }
 
