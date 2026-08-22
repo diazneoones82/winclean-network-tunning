@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using Microsoft.Win32;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Threading;
 using System.Windows.Forms;
@@ -68,8 +67,6 @@ internal static class Program
 internal sealed class CleanupForm : Form
 {
     private const string AppName = "WinClean & Network Tunning";
-    private const int WM_NCLBUTTONDOWN = 0xA1;
-    private const int HTCAPTION = 0x2;
     internal static readonly Color Amoled = Color.Black;
     internal static readonly Color Panel = Color.FromArgb(10, 7, 5);
     internal static readonly Color PanelSoft = Color.FromArgb(22, 12, 7);
@@ -98,12 +95,6 @@ internal sealed class CleanupForm : Form
     private volatile bool isRunning;
     private bool allowExit;
 
-    [DllImport("user32.dll")]
-    private static extern bool ReleaseCapture();
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
-
     public CleanupForm(bool autoRunSystemOnOpen)
     {
         BuildSteps();
@@ -123,15 +114,14 @@ internal sealed class CleanupForm : Form
         Height = 720;
         MinimumSize = new Size(760, 560);
         StartPosition = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.None;
+        FormBorderStyle = FormBorderStyle.Sizable;
         BackColor = Amoled;
         ForeColor = TextMain;
         Font = new Font("Segoe UI", 10F);
-        Padding = new Padding(16);
+        Padding = new Padding(12);
         DoubleBuffered = true;
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-        Resize += delegate { ApplyRoundedWindow(); };
 
         TableLayoutPanel layout = new TableLayoutPanel();
         layout.Dock = DockStyle.Fill;
@@ -145,7 +135,6 @@ internal sealed class CleanupForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 180F));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 132F));
         Controls.Add(layout);
-        ApplyRoundedWindow();
 
         layout.Controls.Add(BuildTitleBar(), 0, 0);
 
@@ -267,7 +256,6 @@ internal sealed class CleanupForm : Form
         bar.Dock = DockStyle.Fill;
         bar.BackColor = Amoled;
         bar.Padding = new Padding(16, 8, 12, 8);
-        bar.MouseDown += DragWindow;
 
         PictureBox iconBox = new PictureBox();
         iconBox.Image = Icon == null ? SystemIcons.Application.ToBitmap() : Icon.ToBitmap();
@@ -276,7 +264,6 @@ internal sealed class CleanupForm : Form
         iconBox.Height = 34;
         iconBox.Left = 16;
         iconBox.Top = 14;
-        iconBox.MouseDown += DragWindow;
         bar.Controls.Add(iconBox);
 
         Label title = new Label();
@@ -290,39 +277,15 @@ internal sealed class CleanupForm : Form
         title.Top = 8;
         title.Height = 46;
         title.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
-        title.Width = Width - 190;
-        title.MouseDown += DragWindow;
+        title.Width = Width - 90;
         bar.Controls.Add(title);
-
-        TitleButton close = new TitleButton("x");
-        close.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        close.Left = Width - 64;
-        close.Top = 13;
-        close.Click += delegate { Close(); };
-        bar.Controls.Add(close);
-
-        TitleButton minimize = new TitleButton("-");
-        minimize.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        minimize.Left = Width - 108;
-        minimize.Top = 13;
-        minimize.Click += delegate { WindowState = FormWindowState.Minimized; };
-        bar.Controls.Add(minimize);
 
         bar.Resize += delegate
         {
-            title.Width = Math.Max(120, bar.Width - 172);
-            minimize.Left = bar.Width - 98;
-            close.Left = bar.Width - 54;
+            title.Width = Math.Max(120, bar.Width - 78);
         };
 
         return bar;
-    }
-
-    private void DragWindow(object sender, MouseEventArgs e)
-    {
-        if (e.Button != MouseButtons.Left) return;
-        ReleaseCapture();
-        SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
     }
 
     private void BuildTray()
@@ -661,11 +624,7 @@ internal sealed class CleanupForm : Form
 
     private void ApplyRoundedWindow()
     {
-        if (Width <= 0 || Height <= 0) return;
-        using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, Width - 1, Height - 1), 20))
-        {
-            Region = new Region(path);
-        }
+        Region = null;
     }
 
     internal static GraphicsPath RoundedRect(Rectangle bounds, int radius)
@@ -938,25 +897,7 @@ internal sealed class CleanupForm : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        ApplyRoundedWindow();
         if (WindowState == FormWindowState.Minimized) HideToTray();
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        base.OnPaint(e);
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        e.Graphics.Clear(Amoled);
-        using (GraphicsPath path = RoundedRect(new Rectangle(3, 3, Width - 7, Height - 7), 18))
-        using (Pen outer = new Pen(Color.FromArgb(175, AccentSoft), 1.4F))
-        {
-            e.Graphics.DrawPath(outer, path);
-        }
-    }
-
-    protected override void OnPaintBackground(PaintEventArgs e)
-    {
-        e.Graphics.Clear(Amoled);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
@@ -1046,55 +987,6 @@ internal sealed class RoundedButton : Button
             format.Alignment = StringAlignment.Center;
             format.LineAlignment = StringAlignment.Center;
             using (SolidBrush textBrush = new SolidBrush(text))
-            {
-                e.Graphics.DrawString(Text, Font, textBrush, rect, format);
-            }
-        }
-    }
-
-    protected override void OnPaintBackground(PaintEventArgs pevent)
-    {
-        pevent.Graphics.Clear(Parent == null ? CleanupForm.Amoled : Parent.BackColor);
-    }
-}
-
-internal sealed class TitleButton : Button
-{
-    private bool hovering;
-
-    public TitleButton(string text)
-    {
-        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        Text = text;
-        Width = 36;
-        Height = 34;
-        FlatStyle = FlatStyle.Flat;
-        FlatAppearance.BorderSize = 0;
-        BackColor = CleanupForm.PanelSoft;
-        ForeColor = Color.FromArgb(255, 210, 166);
-        Font = new Font("Segoe UI Semibold", 13F);
-        Cursor = Cursors.Hand;
-        UseVisualStyleBackColor = false;
-        MouseEnter += delegate { hovering = true; Invalidate(); };
-        MouseLeave += delegate { hovering = false; Invalidate(); };
-    }
-
-    protected override void OnPaint(PaintEventArgs e)
-    {
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        e.Graphics.Clear(Parent == null ? CleanupForm.Amoled : Parent.BackColor);
-        Rectangle rect = new Rectangle(0, 0, Width - 1, Height - 1);
-        Color fill = hovering ? Color.FromArgb(78, 34, 10) : BackColor;
-        using (GraphicsPath path = CleanupForm.RoundedRect(rect, 11))
-        using (SolidBrush brush = new SolidBrush(fill))
-        using (Pen pen = new Pen(hovering ? CleanupForm.Accent : CleanupForm.AccentSoft, 1F))
-        using (StringFormat format = new StringFormat())
-        {
-            e.Graphics.FillPath(brush, path);
-            e.Graphics.DrawPath(pen, path);
-            format.Alignment = StringAlignment.Center;
-            format.LineAlignment = StringAlignment.Center;
-            using (SolidBrush textBrush = new SolidBrush(ForeColor))
             {
                 e.Graphics.DrawString(Text, Font, textBrush, rect, format);
             }

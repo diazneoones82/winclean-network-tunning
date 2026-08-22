@@ -21,10 +21,10 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 - Custom orange AMOLED cleanup/network icon is embedded in the app and used for the window, taskbar, and tray.
 - Polished tray menu supports Windows light and dark app themes with rounded orange hover states.
 - Tray restore and background runs use handle-safe UI updates to avoid WinForms handle timing errors.
-- Modern borderless app chrome with rounded window corners, subtle orange borders, and polished custom title controls.
+- Native thick Windows app border with polished AMOLED content surfaces.
 - Tray menu uses compact rounded command rows with a soft orange accent rail.
 - Custom dark/orange segmented tabs, progress bar, and command list headers avoid stock WinForms white highlight blocks.
-- Window and button painting explicitly clears AMOLED backgrounds to prevent white corner artifacts.
+- Uses the native Windows frame to avoid borderless-window white corner artifacts.
 
 ## Important
 
