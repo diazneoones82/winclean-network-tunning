@@ -81,7 +81,7 @@ internal sealed class CleanupForm : Form
     private readonly List<CleanupStep> steps = new List<CleanupStep>();
     private readonly List<CleanupStep> activeSteps = new List<CleanupStep>();
     private readonly ListView stepList = new ListView();
-    private readonly ProgressBar progress = new ProgressBar();
+    private readonly ThemedProgressBar progress = new ThemedProgressBar();
     private readonly Label status = new Label();
     private readonly TextBox logBox = new TextBox();
     private readonly RoundedButton fullButton = new RoundedButton();
@@ -89,6 +89,8 @@ internal sealed class CleanupForm : Form
     private readonly RoundedButton systemButton = new RoundedButton();
     private readonly RoundedButton tuningButton = new RoundedButton();
     private readonly RoundedButton dotNetButton = new RoundedButton();
+    private readonly RoundedButton cleanupTabButton = new RoundedButton();
+    private readonly RoundedButton tuningTabButton = new RoundedButton();
     private readonly CheckBox autoRunSystemCheckBox = new CheckBox();
     private readonly NotifyIcon trayIcon = new NotifyIcon();
     private readonly ToolTip stepTip = new ToolTip();
@@ -125,7 +127,8 @@ internal sealed class CleanupForm : Form
         BackColor = Amoled;
         ForeColor = TextMain;
         Font = new Font("Segoe UI", 10F);
-        Padding = new Padding(12);
+        Padding = new Padding(14);
+        DoubleBuffered = true;
         Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         Resize += delegate { ApplyRoundedWindow(); };
 
@@ -154,30 +157,37 @@ internal sealed class CleanupForm : Form
         layout.Controls.Add(status, 0, 1);
 
         progress.Dock = DockStyle.Fill;
+        progress.BackColor = PanelSoft;
+        progress.ForeColor = Accent;
         progress.Minimum = 0;
         progress.Maximum = steps.Count;
         layout.Controls.Add(progress, 0, 2);
 
-        TabControl actionTabs = new TabControl();
-        actionTabs.Dock = DockStyle.Fill;
-        actionTabs.BackColor = Amoled;
-        actionTabs.Appearance = TabAppearance.FlatButtons;
-        actionTabs.DrawMode = TabDrawMode.OwnerDrawFixed;
-        actionTabs.ItemSize = new Size(132, 34);
-        actionTabs.SizeMode = TabSizeMode.Fixed;
-        actionTabs.DrawItem += DrawActionTab;
-        actionTabs.SelectedIndexChanged += delegate
-        {
-            if (actionTabs.SelectedIndex == 0) ShowSteps(StepGroup.Full);
-            if (actionTabs.SelectedIndex == 1) ShowSteps(StepGroup.Tuning);
-        };
+        BorderPanel actionShell = new BorderPanel();
+        actionShell.Dock = DockStyle.Fill;
+        actionShell.Padding = new Padding(10);
+        TableLayoutPanel actionLayout = new TableLayoutPanel();
+        actionLayout.Dock = DockStyle.Fill;
+        actionLayout.BackColor = Panel;
+        actionLayout.ColumnCount = 1;
+        actionLayout.RowCount = 2;
+        actionLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42F));
+        actionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        actionShell.Controls.Add(actionLayout);
 
-        TabPage cleanupTab = new TabPage("Cleanup");
-        cleanupTab.BackColor = Amoled;
+        FlowLayoutPanel modeTabs = new FlowLayoutPanel();
+        modeTabs.Dock = DockStyle.Fill;
+        modeTabs.BackColor = Panel;
+        modeTabs.Padding = new Padding(0, 0, 0, 4);
+        modeTabs.WrapContents = false;
+        modeTabs.Controls.Add(MakeTabButton(cleanupTabButton, "Cleanup", StepGroup.Full));
+        modeTabs.Controls.Add(MakeTabButton(tuningTabButton, "Tunning", StepGroup.Tuning));
+        actionLayout.Controls.Add(modeTabs, 0, 0);
+
         FlowLayoutPanel cleanupActions = new FlowLayoutPanel();
         cleanupActions.Dock = DockStyle.Fill;
-        cleanupActions.BackColor = Amoled;
-        cleanupActions.Padding = new Padding(14, 10, 14, 8);
+        cleanupActions.BackColor = Panel;
+        cleanupActions.Padding = new Padding(0, 8, 0, 0);
         cleanupActions.WrapContents = true;
         cleanupActions.Controls.Add(MakeActionButton(fullButton, "Full Cleanup", StepGroup.Full));
         cleanupActions.Controls.Add(MakeActionButton(networkButton, "Network Cleanup", StepGroup.Network));
@@ -192,21 +202,25 @@ internal sealed class CleanupForm : Form
         autoRunSystemCheckBox.Checked = IsStartupEnabled();
         autoRunSystemCheckBox.CheckedChanged += delegate { SetStartupEnabled(autoRunSystemCheckBox.Checked); };
         cleanupActions.Controls.Add(autoRunSystemCheckBox);
-        cleanupTab.Controls.Add(cleanupActions);
-        actionTabs.TabPages.Add(cleanupTab);
 
-        TabPage tuningTab = new TabPage("Tunning");
-        tuningTab.BackColor = Amoled;
         FlowLayoutPanel tuningActions = new FlowLayoutPanel();
         tuningActions.Dock = DockStyle.Fill;
-        tuningActions.BackColor = Amoled;
-        tuningActions.Padding = new Padding(14, 10, 14, 8);
+        tuningActions.BackColor = Panel;
+        tuningActions.Padding = new Padding(0, 8, 0, 0);
         tuningActions.WrapContents = true;
         tuningActions.Controls.Add(MakeActionButton(tuningButton, "Run Tunning", StepGroup.Tuning));
-        tuningTab.Controls.Add(tuningActions);
-        actionTabs.TabPages.Add(tuningTab);
+        tuningActions.Visible = false;
 
-        layout.Controls.Add(actionTabs, 0, 5);
+        Panel actionHost = new Panel();
+        actionHost.Dock = DockStyle.Fill;
+        actionHost.BackColor = Panel;
+        actionHost.Controls.Add(cleanupActions);
+        actionHost.Controls.Add(tuningActions);
+        actionLayout.Controls.Add(actionHost, 0, 1);
+        cleanupTabButton.Click += delegate { cleanupActions.Visible = true; tuningActions.Visible = false; ShowSteps(StepGroup.Full); UpdateTabButtons(StepGroup.Full); };
+        tuningTabButton.Click += delegate { cleanupActions.Visible = false; tuningActions.Visible = true; ShowSteps(StepGroup.Tuning); UpdateTabButtons(StepGroup.Tuning); };
+        UpdateTabButtons(StepGroup.Full);
+        layout.Controls.Add(actionShell, 0, 5);
 
         logBox.Dock = DockStyle.Fill;
         logBox.Multiline = true;
@@ -214,7 +228,7 @@ internal sealed class CleanupForm : Form
         logBox.ReadOnly = true;
         logBox.BackColor = Panel;
         logBox.ForeColor = Color.FromArgb(255, 198, 130);
-        logBox.BorderStyle = BorderStyle.FixedSingle;
+        logBox.BorderStyle = BorderStyle.None;
         BorderPanel logPanel = new BorderPanel();
         logPanel.Dock = DockStyle.Fill;
         logPanel.Padding = new Padding(8);
@@ -229,6 +243,10 @@ internal sealed class CleanupForm : Form
         stepList.ForeColor = TextMain;
         stepList.BorderStyle = BorderStyle.None;
         stepList.HideSelection = false;
+        stepList.OwnerDraw = true;
+        stepList.DrawColumnHeader += DrawStepHeader;
+        stepList.DrawSubItem += DrawStepSubItem;
+        stepList.DrawItem += delegate { };
         stepList.Columns.Add("#", 46);
         stepList.Columns.Add("Status", 110);
         stepList.Columns.Add("Command", 760);
@@ -470,6 +488,60 @@ internal sealed class CleanupForm : Form
         button.Font = new Font("Segoe UI Semibold", 11F);
         button.Click += delegate { OpenDotNetDownload(); };
         return button;
+    }
+
+    private RoundedButton MakeTabButton(RoundedButton button, string text, StepGroup group)
+    {
+        button.Text = text;
+        button.Width = 150;
+        button.Height = 34;
+        button.Margin = new Padding(0, 0, 10, 0);
+        button.BackColor = PanelSoft;
+        button.ForeColor = TextMuted;
+        button.BorderColor = AccentSoft;
+        button.Font = new Font("Segoe UI Semibold", 10.5F);
+        return button;
+    }
+
+    private void UpdateTabButtons(StepGroup selected)
+    {
+        StyleTabButton(cleanupTabButton, selected != StepGroup.Tuning);
+        StyleTabButton(tuningTabButton, selected == StepGroup.Tuning);
+    }
+
+    private void StyleTabButton(RoundedButton button, bool selected)
+    {
+        button.BackColor = selected ? Accent : PanelSoft;
+        button.ForeColor = selected ? Color.Black : Color.FromArgb(255, 210, 166);
+        button.BorderColor = selected ? Accent : AccentSoft;
+        button.Invalidate();
+    }
+
+    private void DrawStepHeader(object sender, DrawListViewColumnHeaderEventArgs e)
+    {
+        using (SolidBrush background = new SolidBrush(Color.FromArgb(18, 10, 6)))
+        using (SolidBrush textBrush = new SolidBrush(Color.FromArgb(255, 210, 166)))
+        using (Pen line = new Pen(Color.FromArgb(120, AccentSoft), 1F))
+        {
+            e.Graphics.FillRectangle(background, e.Bounds);
+            Rectangle textRect = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 14, e.Bounds.Height);
+            TextRenderer.DrawText(e.Graphics, e.Header.Text, new Font("Segoe UI Semibold", 9.5F), textRect, textBrush.Color, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            e.Graphics.DrawLine(line, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+        }
+    }
+
+    private void DrawStepSubItem(object sender, DrawListViewSubItemEventArgs e)
+    {
+        bool selected = e.Item.Selected;
+        Color backgroundColor = selected ? Color.FromArgb(44, 21, 8) : Panel;
+        using (SolidBrush background = new SolidBrush(backgroundColor))
+        {
+            e.Graphics.FillRectangle(background, e.Bounds);
+        }
+
+        Color textColor = selected ? Color.FromArgb(255, 226, 198) : e.Item.ForeColor;
+        Rectangle textRect = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 14, e.Bounds.Height);
+        TextRenderer.DrawText(e.Graphics, e.SubItem.Text, stepList.Font, textRect, textColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private void CheckDotNetRuntime()
@@ -873,11 +945,12 @@ internal sealed class CleanupForm : Form
         base.OnPaint(e);
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         using (GraphicsPath path = RoundedRect(new Rectangle(1, 1, Width - 3, Height - 3), 18))
+        using (GraphicsPath innerPath = RoundedRect(new Rectangle(5, 5, Width - 11, Height - 11), 14))
         using (Pen outer = new Pen(Color.FromArgb(135, Accent), 1.6F))
         using (Pen inner = new Pen(Color.FromArgb(55, AccentSoft), 1F))
         {
             e.Graphics.DrawPath(outer, path);
-            e.Graphics.DrawPath(inner, RoundedRect(new Rectangle(5, 5, Width - 11, Height - 11), 14));
+            e.Graphics.DrawPath(inner, innerPath);
         }
     }
 
@@ -902,6 +975,38 @@ internal enum StepGroup
     Network,
     System,
     Tuning
+}
+
+internal sealed class ThemedProgressBar : ProgressBar
+{
+    public ThemedProgressBar()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        Rectangle rect = new Rectangle(1, 4, Width - 2, Math.Max(8, Height - 8));
+        using (GraphicsPath track = CleanupForm.RoundedRect(rect, 5))
+        using (SolidBrush trackBrush = new SolidBrush(CleanupForm.PanelSoft))
+        using (Pen border = new Pen(Color.FromArgb(80, CleanupForm.AccentSoft), 1F))
+        {
+            e.Graphics.FillPath(trackBrush, track);
+            e.Graphics.DrawPath(border, track);
+        }
+
+        int range = Math.Max(1, Maximum - Minimum);
+        float percent = Math.Max(0f, Math.Min(1f, (Value - Minimum) / (float)range));
+        if (percent <= 0f) return;
+
+        Rectangle fillRect = new Rectangle(rect.X, rect.Y, Math.Max(8, (int)(rect.Width * percent)), rect.Height);
+        using (GraphicsPath fill = CleanupForm.RoundedRect(fillRect, 5))
+        using (LinearGradientBrush brush = new LinearGradientBrush(fillRect, CleanupForm.Accent, Color.FromArgb(255, 173, 70), 0F))
+        {
+            e.Graphics.FillPath(brush, fill);
+        }
+    }
 }
 
 internal sealed class RoundedButton : Button

@@ -23,6 +23,7 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 - Tray restore and background runs use handle-safe UI updates to avoid WinForms handle timing errors.
 - Modern borderless app chrome with rounded window corners, subtle orange borders, and polished custom title controls.
 - Tray menu uses compact rounded command rows with a soft orange accent rail.
+- Custom dark/orange segmented tabs, progress bar, and command list headers avoid stock WinForms white highlight blocks.
 
 ## Important
 
