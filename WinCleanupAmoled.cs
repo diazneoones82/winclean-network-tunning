@@ -12,25 +12,29 @@ using System.Windows.Forms;
 
 internal static class Program
 {
+    private const string AppName = "WinClean & Network Tunning";
+    private const string ElevatedLaunchTaskName = "WinCleanNetworkTunning App";
+    private const string InstallElevatedLaunchTaskArg = "--install-elevated-launch-task";
+    private const string FromElevatedTaskArg = "--from-elevated-task";
+
     [STAThread]
     private static void Main()
     {
         string[] args = Environment.GetCommandLineArgs();
         if (!IsAdministrator())
         {
-            try
+            if (TaskExists(ElevatedLaunchTaskName) && RunElevatedLaunchTask())
             {
-                ProcessStartInfo startInfo = new ProcessStartInfo(Application.ExecutablePath);
-                startInfo.UseShellExecute = true;
-                startInfo.Verb = "runas";
-                startInfo.Arguments = BuildArguments(args);
-                Process.Start(startInfo);
+                return;
             }
-            catch
-            {
-                MessageBox.Show("Administrator permission is required to run Windows cleanup commands.", "WinClean & Network Tunning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
+
+            RelaunchAsAdminForTaskInstall(args);
             return;
+        }
+
+        if (HasArg(args, InstallElevatedLaunchTaskArg))
+        {
+            InstallElevatedLaunchTask();
         }
 
         Application.EnableVisualStyles();
@@ -54,12 +58,72 @@ internal static class Program
         return false;
     }
 
-    private static string BuildArguments(string[] args)
+    private static void RelaunchAsAdminForTaskInstall(string[] args)
+    {
+        try
+        {
+            ProcessStartInfo startInfo = new ProcessStartInfo(Application.ExecutablePath);
+            startInfo.UseShellExecute = true;
+            startInfo.Verb = "runas";
+            startInfo.Arguments = BuildArguments(args, true);
+            Process.Start(startInfo);
+        }
+        catch
+        {
+            MessageBox.Show("Administrator permission is required once to install the saved elevated app launcher.", AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private static bool TaskExists(string taskName)
+    {
+        return RunHidden("schtasks.exe", "/Query /TN \"" + taskName + "\"").ExitCode == 0;
+    }
+
+    private static bool RunElevatedLaunchTask()
+    {
+        return RunHidden("schtasks.exe", "/Run /TN \"" + ElevatedLaunchTaskName + "\"").ExitCode == 0;
+    }
+
+    private static void InstallElevatedLaunchTask()
+    {
+        string taskCommand = "\"" + Application.ExecutablePath + "\" " + FromElevatedTaskArg;
+        string arguments = "/Create /F /TN \"" + ElevatedLaunchTaskName + "\" /SC ONDEMAND /RL HIGHEST /TR \"" + taskCommand + "\"";
+        CommandResult result = RunHidden("schtasks.exe", arguments);
+        if (result.ExitCode != 0)
+        {
+            MessageBox.Show("Could not install the saved elevated launcher:\r\n" + result.Text, AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    private static CommandResult RunHidden(string fileName, string arguments)
+    {
+        ProcessStartInfo startInfo = new ProcessStartInfo(fileName, arguments);
+        startInfo.UseShellExecute = false;
+        startInfo.CreateNoWindow = true;
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+
+        using (Process process = Process.Start(startInfo))
+        {
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return new CommandResult(process.ExitCode, (output + error).Trim());
+        }
+    }
+
+    private static string BuildArguments(string[] args, bool includeTaskInstall)
     {
         List<string> values = new List<string>();
         for (int i = 1; i < args.Length; i++)
         {
+            if (string.Equals(args[i], InstallElevatedLaunchTaskArg, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(args[i], FromElevatedTaskArg, StringComparison.OrdinalIgnoreCase)) continue;
             values.Add("\"" + args[i].Replace("\"", "\\\"") + "\"");
+        }
+        if (includeTaskInstall)
+        {
+            values.Add(InstallElevatedLaunchTaskArg);
         }
         return string.Join(" ", values.ToArray());
     }
@@ -148,6 +212,7 @@ internal sealed class CleanupForm : Form
         Height = 720;
         MinimumSize = new Size(760, 560);
         StartPosition = FormStartPosition.CenterScreen;
+        WindowState = FormWindowState.Maximized;
         FormBorderStyle = FormBorderStyle.Sizable;
         BackColor = Amoled;
         ForeColor = TextMain;
@@ -336,14 +401,6 @@ internal sealed class CleanupForm : Form
         menu.Padding = new Padding(8);
         menu.ShowImageMargin = false;
         menu.Renderer = new TrayMenuRenderer(menuBack, menuText, menuSelected, Accent);
-        menu.Opened += delegate
-        {
-            if (menu.Width <= 0 || menu.Height <= 0) return;
-            using (GraphicsPath path = RoundedRect(new Rectangle(0, 0, menu.Width, menu.Height), 14))
-            {
-                menu.Region = new Region(path);
-            }
-        };
 
         AddTrayItem(menu, "Open", delegate { RestoreFromTray(); });
         menu.Items.Add(new ToolStripSeparator());
@@ -912,7 +969,7 @@ internal sealed class CleanupForm : Form
     {
         ShowInTaskbar = true;
         Show();
-        WindowState = FormWindowState.Normal;
+        WindowState = FormWindowState.Maximized;
         Activate();
     }
 
@@ -1073,6 +1130,18 @@ internal sealed class TrayMenuRenderer : ToolStripProfessionalRenderer
     protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
     {
         e.Graphics.Clear(background);
+    }
+
+    protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+    {
+        Rectangle rect = new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1);
+        using (Pen outer = new Pen(Color.FromArgb(140, 40, 40, 40), 1F))
+        using (Pen inner = new Pen(Color.FromArgb(115, accent), 1F))
+        {
+            e.Graphics.DrawRectangle(outer, rect);
+            rect.Inflate(-1, -1);
+            e.Graphics.DrawRectangle(inner, rect);
+        }
     }
 
     protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)

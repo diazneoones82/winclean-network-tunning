@@ -12,20 +12,21 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 
 - Full Cleanup, Network Cleanup, and System Cleanup buttons.
 - Separate Tunning tab for permanent performance, telemetry, pagefile, power, and TCP/IP tuning changes.
-- Auto-elevates with UAC when administrator access is needed.
+- First launch asks for administrator approval once, then saves a named elevated Scheduled Task launcher for future opens.
 - Creates a fresh timestamped log file for every run.
 - Shows per-command progress and stores command result details for completed or failed steps.
 - Optional startup checkbox to auto-run System Cleanup at user sign-in through an elevated Windows Scheduled Task, avoiding repeated UAC prompts after the one-time setup.
 - Close or minimize to keep the app running in the system tray.
 - Tray menu includes Open, Run Full Cleanup, Run Network Cleanup, Run System Cleanup, Run Tunning, and Exit.
 - Custom orange AMOLED cleanup/network icon is embedded in the app and used for the window, taskbar, and tray.
-- Polished tray menu supports Windows light and dark app themes with rounded orange hover states.
+- Polished tray menu supports Windows light and dark app themes with a clean grey/black border and orange hover states.
 - Tray restore and background runs use handle-safe UI updates to avoid WinForms handle timing errors.
 - Native thick Windows app border with polished AMOLED content surfaces.
 - Native window title bar and border are tinted dark grey/black instead of using the blue Windows accent color.
 - Tray menu uses compact rounded command rows with a soft orange accent rail.
 - Custom dark/orange segmented tabs, progress bar, and command list headers avoid stock WinForms white highlight blocks.
 - Uses the native Windows frame to avoid borderless-window white corner artifacts.
+- Opens maximized by default and restores maximized from the tray.
 
 ## Important
 
