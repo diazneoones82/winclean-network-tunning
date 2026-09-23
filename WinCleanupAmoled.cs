@@ -16,6 +16,9 @@ internal static class Program
     private const string ElevatedLaunchTaskName = "WinCleanNetworkTunning App";
     private const string InstallElevatedLaunchTaskArg = "--install-elevated-launch-task";
     private const string FromElevatedTaskArg = "--from-elevated-task";
+    private const string AutoRunSystemCleanupArg = "--autorun-system-cleanup";
+    private const string StartupTrayArg = "--startup-tray";
+    private const string SingleInstanceMutexName = @"Global\WinCleanNetworkTunning.SingleInstance";
 
     [STAThread]
     private static void Main()
@@ -23,7 +26,7 @@ internal static class Program
         string[] args = Environment.GetCommandLineArgs();
         if (!IsAdministrator())
         {
-            if (TaskExists(ElevatedLaunchTaskName) && RunElevatedLaunchTask())
+            if (!HasRuntimeArgs(args) && TaskExists(ElevatedLaunchTaskName) && RunElevatedLaunchTask())
             {
                 return;
             }
@@ -32,6 +35,21 @@ internal static class Program
             return;
         }
 
+        bool ownsMutex;
+        using (Mutex singleInstance = new Mutex(true, SingleInstanceMutexName, out ownsMutex))
+        {
+            if (!ownsMutex)
+            {
+                return;
+            }
+
+            RunAdmin(args);
+            GC.KeepAlive(singleInstance);
+        }
+    }
+
+    private static void RunAdmin(string[] args)
+    {
         if (HasArg(args, InstallElevatedLaunchTaskArg))
         {
             InstallElevatedLaunchTask();
@@ -39,7 +57,7 @@ internal static class Program
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new CleanupForm(HasArg(args, "--autorun-system-cleanup")));
+        Application.Run(new CleanupForm(HasArg(args, AutoRunSystemCleanupArg), HasArg(args, StartupTrayArg)));
     }
 
     private static bool IsAdministrator()
@@ -56,6 +74,11 @@ internal static class Program
             if (string.Equals(args[i], value, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
+    }
+
+    private static bool HasRuntimeArgs(string[] args)
+    {
+        return HasArg(args, AutoRunSystemCleanupArg) || HasArg(args, StartupTrayArg);
     }
 
     private static void RelaunchAsAdminForTaskInstall(string[] args)
@@ -158,24 +181,33 @@ internal sealed class CleanupForm : Form
     private readonly RoundedButton cleanupTabButton = new RoundedButton();
     private readonly RoundedButton tuningTabButton = new RoundedButton();
     private readonly CheckBox autoRunSystemCheckBox = new CheckBox();
+    private readonly CheckBox startupTrayCheckBox = new CheckBox();
     private readonly NotifyIcon trayIcon = new NotifyIcon();
     private readonly ToolTip stepTip = new ToolTip();
     private string logPath = "";
     private volatile bool isRunning;
     private bool allowExit;
+    private readonly bool autoRunSystemOnOpen;
+    private readonly bool startInTrayOnOpen;
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
-    public CleanupForm(bool autoRunSystemOnOpen)
+    public CleanupForm(bool autoRunSystemOnOpen, bool startInTrayOnOpen)
     {
+        this.autoRunSystemOnOpen = autoRunSystemOnOpen;
+        this.startInTrayOnOpen = startInTrayOnOpen;
         BuildSteps();
         BuildUi();
         BuildTray();
         CheckDotNetRuntime();
         if (autoRunSystemOnOpen)
         {
-            Shown += delegate { StartCleanup(StepGroup.System); };
+            Shown += delegate
+            {
+                if (startInTrayOnOpen) HideToTray(false);
+                StartCleanup(StepGroup.System);
+            };
         }
     }
 
@@ -291,6 +323,20 @@ internal sealed class CleanupForm : Form
         autoRunSystemCheckBox.Checked = IsStartupEnabled();
         autoRunSystemCheckBox.CheckedChanged += delegate { SetStartupEnabled(autoRunSystemCheckBox.Checked); };
         cleanupActions.Controls.Add(autoRunSystemCheckBox);
+
+        startupTrayCheckBox.Text = "Start startup cleanup minimized to tray";
+        startupTrayCheckBox.Width = 270;
+        startupTrayCheckBox.Height = 36;
+        startupTrayCheckBox.Margin = new Padding(12, 2, 10, 2);
+        startupTrayCheckBox.ForeColor = TextMuted;
+        startupTrayCheckBox.BackColor = Amoled;
+        startupTrayCheckBox.Checked = IsStartupTrayEnabled();
+        startupTrayCheckBox.CheckedChanged += delegate
+        {
+            SetStartupTrayEnabled(startupTrayCheckBox.Checked);
+            if (autoRunSystemCheckBox.Checked) SetStartupEnabled(true);
+        };
+        cleanupActions.Controls.Add(startupTrayCheckBox);
 
         FlowLayoutPanel tuningActions = new FlowLayoutPanel();
         tuningActions.Dock = DockStyle.Fill;
@@ -639,17 +685,49 @@ internal sealed class CleanupForm : Form
         return RunHidden("schtasks.exe", "/Query /TN \"WinCleanNetworkTunning System Cleanup\"").ExitCode == 0;
     }
 
+    private bool IsStartupTrayEnabled()
+    {
+        try
+        {
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(@"Software\WinCleanNetworkTunning"))
+            {
+                object value = key == null ? null : key.GetValue("StartupTrayMode");
+                return !(value is int) || (int)value != 0;
+            }
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private void SetStartupTrayEnabled(bool enabled)
+    {
+        try
+        {
+            using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\WinCleanNetworkTunning"))
+            {
+                if (key != null) key.SetValue("StartupTrayMode", enabled ? 1 : 0, RegistryValueKind.DWord);
+            }
+        }
+        catch { }
+    }
+
     private void SetStartupEnabled(bool enabled)
     {
         if (enabled)
         {
-            string taskCommand = "\"" + Application.ExecutablePath + "\" --autorun-system-cleanup";
+            string startupArgs = AutoRunSystemCleanupArg();
+            if (startupTrayCheckBox.Checked) startupArgs += " " + StartupTrayArg();
+            string taskCommand = "\"" + Application.ExecutablePath + "\" " + startupArgs;
             string args = "/Create /F /TN \"WinCleanNetworkTunning System Cleanup\" /SC ONLOGON /RL HIGHEST /TR \"" + taskCommand + "\"";
             CommandResult result = RunHidden("schtasks.exe", args);
             if (result.ExitCode == 0)
             {
                 RemoveOldRegistryStartup();
-                status.Text = "Startup enabled: System Cleanup will auto-run elevated at sign-in.";
+                status.Text = startupTrayCheckBox.Checked
+                    ? "Startup enabled: System Cleanup will run elevated in the tray at sign-in."
+                    : "Startup enabled: System Cleanup will open elevated at sign-in.";
             }
             else
             {
@@ -662,6 +740,16 @@ internal sealed class CleanupForm : Form
         CommandResult deleteResult = RunHidden("schtasks.exe", "/Delete /F /TN \"WinCleanNetworkTunning System Cleanup\"");
         RemoveOldRegistryStartup();
         status.Text = deleteResult.ExitCode == 0 ? "Startup disabled." : "Startup was not enabled.";
+    }
+
+    private string AutoRunSystemCleanupArg()
+    {
+        return "--autorun-system-cleanup";
+    }
+
+    private string StartupTrayArg()
+    {
+        return "--startup-tray";
     }
 
     private void RemoveOldRegistryStartup()
@@ -813,7 +901,10 @@ internal sealed class CleanupForm : Form
         AppendLog("Complete.");
         OnUi(delegate
         {
-            trayIcon.ShowBalloonTip(3500, AppName, "Run complete. Log: " + Path.GetFileName(logPath), ToolTipIcon.Info);
+            string message = autoRunSystemOnOpen && startInTrayOnOpen
+                ? "Startup System Cleanup complete. Log: " + Path.GetFileName(logPath)
+                : "Run complete. Log: " + Path.GetFileName(logPath);
+            trayIcon.ShowBalloonTip(3500, AppName, message, ToolTipIcon.Info);
         });
         isRunning = false;
         SetButtons(true);
@@ -960,9 +1051,17 @@ internal sealed class CleanupForm : Form
 
     private void HideToTray()
     {
+        HideToTray(true);
+    }
+
+    private void HideToTray(bool notify)
+    {
         Hide();
         ShowInTaskbar = false;
-        trayIcon.ShowBalloonTip(2500, AppName, "Still running in the background. Use the tray icon to open, run, or exit.", ToolTipIcon.Info);
+        if (notify)
+        {
+            trayIcon.ShowBalloonTip(2500, AppName, "Still running in the background. Use the tray icon to open, run, or exit.", ToolTipIcon.Info);
+        }
     }
 
     private void RestoreFromTray()
