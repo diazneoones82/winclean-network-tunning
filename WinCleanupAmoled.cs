@@ -110,7 +110,7 @@ internal static class Program
     private static void InstallElevatedLaunchTask()
     {
         string taskCommand = "\"" + Application.ExecutablePath + "\" " + FromElevatedTaskArg;
-        string arguments = "/Create /F /TN \"" + ElevatedLaunchTaskName + "\" /SC ONDEMAND /RL HIGHEST /TR \"" + taskCommand + "\"";
+        string arguments = "/Create /F /TN \"" + ElevatedLaunchTaskName + "\" /SC ONCE /ST 23:59 /RL HIGHEST /TR \"" + taskCommand + "\"";
         CommandResult result = RunHidden("schtasks.exe", arguments);
         if (result.ExitCode != 0)
         {

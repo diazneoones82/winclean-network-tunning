@@ -13,6 +13,7 @@ The app is a single Windows executable built with .NET Framework WinForms. It do
 - Full Cleanup, Network Cleanup, and System Cleanup buttons.
 - Separate Tunning tab for permanent performance, telemetry, pagefile, power, and TCP/IP tuning changes.
 - First launch asks for administrator approval once, then saves a named elevated Scheduled Task launcher for future opens.
+- The saved elevated launcher uses a valid Windows Scheduled Task definition and is started on demand for normal app opens.
 - Creates a fresh timestamped log file for every run.
 - Shows per-command progress and stores command result details for completed or failed steps.
 - Optional startup checkbox to auto-run System Cleanup at user sign-in through an elevated Windows Scheduled Task, avoiding repeated UAC prompts after the one-time setup.
